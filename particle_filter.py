@@ -146,30 +146,26 @@ class ParticleFilter:
         self.last_odom = odometry
 
         M = np.linalg.inv(last_T).dot(T)
-        _, _, angles, trans, _ = tf.decompose_matrix(M)
+        _, _, _, trans, _ = tf.decompose_matrix(M)
         dx, dy, _ = trans
-        _, _, dtheta = angles
 
-        # Precompute gaussian noise to apply to x, y, and theta for each particle.
-        # Scale uncertianty by distance + a constant uncertainty
+        # Precompute Gaussian noise to apply to x and y for each particle.
+        # Scale uncertainty by distance + a constant uncertainty
         xSigma = 1e-1 * np.abs(dx) + 1e-2
         ySigma = 1e-1 * np.abs(dy) + 1e-2
         xNoise = np.random.normal(0.0, xSigma, size=self.num_particles)
         yNoise = np.random.normal(0.0, ySigma, size=self.num_particles)
 
-        # Rotational noise
-        thetaSigma = 1e-6
-        thetaNoise = np.random.normal(0.0, thetaSigma, size=self.num_particles)
-
-        # Transform each particle by value + noise.
+        # Transform each particle by value + noise
         transforms = np.repeat(np.eye(4)[np.newaxis, :, :], self.num_particles, axis=0)
         set_x(transforms, dx + xNoise)
         set_y(transforms, dy + yNoise)
-        dTheta = dtheta + thetaNoise
-        set_yaw(transforms, dTheta)
 
         self.particles = np.matmul(self.particles, transforms)
-        self.particle_continuous_yaw += dTheta
+
+        # Directly set all particle headings to the robot's absolute heading without noise
+        self.particle_continuous_yaw = odometry.theta * np.ones(self.num_particles)  # Ensure it's 1D
+        set_yaw(self.particles, self.particle_continuous_yaw)
 
         # Handle field boundaries
         set_x(
